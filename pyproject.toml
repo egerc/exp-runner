@@ -10,3 +10,6 @@ dependencies = [
     "toml>=0.10.2",
     "tqdm>=4.67.1",
 ]
+
+[tool.setuptools.packages.find]
+where = ["src"]
