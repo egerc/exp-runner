@@ -20,8 +20,10 @@ from typing import (
     Callable,
     Collection,
     Dict,
+    Iterable,
     List,
     Optional,
+    Sequence,
     Union,
 )
 import polars as pl
@@ -35,6 +37,12 @@ class Variable[A]:
     value: A
     metadata: MetaData
 
+def combine_variables[A, B](inputs: Sequence[Variable[A]], func: Callable[[Sequence[A]], B]) -> Variable[B]:
+    value = func([var.value for var in inputs])
+    metadata: MetaData = {}
+    for var in inputs:
+        metadata.update(var.metadata)
+    return Variable(value=value, metadata=metadata)
 
 def get_timestamp() -> str:
     return datetime.now().strftime("%Y-%m-%d_%H-%M-%S-%f")[:-3]
@@ -81,8 +89,8 @@ def runner[A](
 
     def decorator(
         func: Callable[[A], List[MetaData]],
-    ) -> Callable[[Collection[Variable[A]]], None]:
-        def wrapped(inputs: Collection[Variable[A]]) -> None:
+    ) -> Callable[[Iterable[Variable[A]]], None]:
+        def wrapped(inputs: Iterable[Variable[A]]) -> None:
             rows: List[MetaData] = [
                 {**var.metadata, **res} for var in inputs for res in func(var.value)
             ]
