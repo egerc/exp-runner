@@ -1,28 +1,44 @@
-"""Utility tools for running parameterized experiments and exporting results.
+"""
+Utility tools for parameterized experiments and result management.
 
 This module provides:
-- A `Variable` container type for pairing values with metadata.
-- A `runner` decorator factory for executing experiment functions over
-  collections of `Variable` instances.
-- Helpers for timestamping and saving results as CSV files using Polars.
 
-The typical workflow is:
-1. Wrap inputs in `Variable` objects with associated metadata.
-2. Decorate an experiment function with `@runner(...)`.
-3. Call the wrapped function on a collection of variables.
-4. Results are merged with metadata and saved automatically.
+- `Variable`: A container pairing a value with associated metadata.
+- `VarProduct`: A base class for generating all combinations of `Variable` instances,
+  automatically constructing subclass instances with merged metadata.
+- `combine_variables`: Helper to combine multiple `Variable` instances into one
+  by applying a function to their values.
+- `runner`: Decorator factory to execute experiment functions over collections
+  of `Variable` instances and export results as CSV.
+- Utility functions:
+  - `get_timestamp`: Generate a high-resolution timestamp string.
+  - `save_df`: Save a Polars DataFrame as a CSV with timestamped filename.
+
+Typical workflow:
+
+1. Wrap inputs in `Variable` objects with metadata describing each variable.
+2. Use `VarProduct.generate_from` to create all combinations of inputs (if needed).
+3. Define an experiment function that accepts a dataclass or object and returns
+   a list of metadata dictionaries.
+4. Decorate the function with `@runner(...)` to automatically run it over variables
+   and save results to CSV.
 """
 
 from dataclasses import dataclass
 from datetime import datetime
+from itertools import product
 from pathlib import Path
 from typing import (
+    Any,
     Callable,
     Dict,
+    Generator,
     Iterable,
     List,
     Optional,
+    Self,
     Sequence,
+    Tuple,
     Union,
 )
 import polars as pl
@@ -36,12 +52,16 @@ class Variable[A]:
     value: A
     metadata: MetaData
 
-def combine_variables[A, B](inputs: Sequence[Variable[A]], func: Callable[[Sequence[A]], B]) -> Variable[B]:
+
+def combine_variables[A, B](
+    inputs: Sequence[Variable[A]], func: Callable[[Sequence[A]], B]
+) -> Variable[B]:
     value = func([var.value for var in inputs])
     metadata: MetaData = {}
     for var in inputs:
         metadata.update(var.metadata)
     return Variable(value=value, metadata=metadata)
+
 
 def get_timestamp() -> str:
     return datetime.now().strftime("%Y-%m-%d_%H-%M-%S-%f")[:-3]
@@ -69,6 +89,20 @@ def save_df(
 
     filename = output_path / f"{'_'.join(parts)}.csv"
     dataframe.write_csv(filename)
+
+
+class VarProduct:
+    @classmethod
+    def generate_from(
+        cls: type[Self],
+        inputs: Tuple[Iterable[Variable[Any]], ...],
+    ) -> Generator[Variable[Self], None, None]:
+        for combo in product(*inputs):
+            values = [v.value for v in combo]
+            metadata = {}
+            for v in combo:
+                metadata.update(v.metadata) # type: ignore
+            yield Variable(cls(*values), metadata) # type: ignore
 
 
 def runner[A](
