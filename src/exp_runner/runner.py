@@ -18,7 +18,6 @@ from datetime import datetime
 from pathlib import Path
 from typing import (
     Callable,
-    Collection,
     Dict,
     Iterable,
     List,
@@ -76,7 +75,7 @@ def runner[A](
     output_dir: Optional[str] = None,
 ) -> Callable[
     [Callable[[A], List[MetaData]]],
-    Callable[[Collection[Variable[A]]], None],
+    Callable[[Iterable[Variable[A]]], None],
 ]:
     """Decorator factory for running experiments and saving results.
 
