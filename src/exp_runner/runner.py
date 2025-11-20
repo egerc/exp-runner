@@ -35,6 +35,7 @@ from typing import (
     Generator,
     Iterable,
     List,
+    Literal,
     Optional,
     Self,
     Sequence,
@@ -45,6 +46,21 @@ import polars as pl
 
 
 type MetaData = Dict[str, Union[str, int, float, bool, None]]
+type df_disk_formats = Literal[
+    "avro",
+    "clipboard",
+    "csv",
+    "database",
+    "delta",
+    "excel",
+    "iceberg",
+    "ipc",
+    "ipc_stream",
+    "json",
+    "ndjson",
+    "parquet",
+    "csv",
+]
 
 
 @dataclass
@@ -71,6 +87,7 @@ def save_df(
     dataframe: pl.DataFrame,
     output_dir: Optional[str] = None,
     name: Optional[str] = None,
+    format: df_disk_formats = "csv",
 ) -> None:
     """Save a DataFrame as a CSV file.
 
@@ -87,8 +104,23 @@ def save_df(
     if name:
         parts.append(name)
 
-    filename = output_path / f"{'_'.join(parts)}.csv"
-    dataframe.write_csv(filename)
+    writer_map = {
+        "csv": dataframe.write_csv,
+        "json": dataframe.write_json,
+        "ndjson": dataframe.write_ndjson,
+        "parquet": dataframe.write_parquet,
+        "ipc": dataframe.write_ipc,
+        "ipc_stream": dataframe.write_ipc_stream,
+        "excel": dataframe.write_excel,
+        "clipboard": dataframe.write_clipboard,
+        "avro": dataframe.write_avro,
+        "delta": dataframe.write_delta,
+        "iceberg": dataframe.write_iceberg,
+        "database": dataframe.write_database,
+    }
+    writer = writer_map.get(format)
+    filename = output_path / f"{'_'.join(parts)}"
+    writer(filename)
 
 
 class VarProduct:
@@ -101,33 +133,33 @@ class VarProduct:
             values = [v.value for v in combo]
             metadata = {}
             for v in combo:
-                metadata.update(v.metadata) # type: ignore
-            yield Variable(cls(*values), metadata) # type: ignore
+                metadata.update(v.metadata)  # type: ignore
+            yield Variable(cls(*values), metadata)  # type: ignore
 
 
 def runner[A](
     output_dir: Optional[str] = None,
+    format: df_disk_formats = "csv",
+    head: Optional[int] = None,
 ) -> Callable[
     [Callable[[A], List[MetaData]]],
     Callable[[Iterable[Variable[A]]], None],
 ]:
-    """Decorator factory for running experiments and saving results.
-
-    Args:
-        output_dir: Directory for CSV output. Defaults to "output".
-
-    Returns:
-        A decorator that wraps a function returning a list of metadata dicts.
-    """
-
     def decorator(
         func: Callable[[A], List[MetaData]],
     ) -> Callable[[Iterable[Variable[A]]], None]:
         def wrapped(inputs: Iterable[Variable[A]]) -> None:
-            rows: List[MetaData] = [
-                {**var.metadata, **res} for var in inputs for res in func(var.value)
-            ]
-            save_df(pl.DataFrame(rows), output_dir, func.__name__)
+            rows: List[MetaData] = []
+
+            for i, var in enumerate(inputs):
+                if head is not None and i >= head:
+                    break
+
+                for res in func(var.value):
+                    rows.append({**var.metadata, **res})
+
+            df = pl.DataFrame(rows)
+            save_df(df, output_dir, func.__name__, format=format)
 
         return wrapped
 
