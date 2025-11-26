@@ -119,7 +119,7 @@ def save_df(
         "database": dataframe.write_database,
     }
     writer = writer_map.get(format)
-    filename = output_path / f"{'_'.join(parts)}"
+    filename = output_path / f"{'_'.join(parts)}.{format}"
     writer(filename)
 
 
