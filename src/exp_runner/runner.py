@@ -43,6 +43,7 @@ from typing import (
     Union,
 )
 import polars as pl
+from tqdm import tqdm
 
 
 type MetaData = Dict[str, Union[str, int, float, bool, None]]
@@ -141,6 +142,7 @@ def runner[A](
     output_dir: Optional[str] = None,
     format: df_disk_formats = "csv",
     head: Optional[int] = None,
+    verbose: bool = True
 ) -> Callable[
     [Callable[[A], List[MetaData]]],
     Callable[[Iterable[Variable[A]]], None],
@@ -150,8 +152,8 @@ def runner[A](
     ) -> Callable[[Iterable[Variable[A]]], None]:
         def wrapped(inputs: Iterable[Variable[A]]) -> None:
             rows: List[MetaData] = []
-
-            for i, var in enumerate(inputs):
+            iterator = tqdm(inputs) if verbose else inputs
+            for i, var in enumerate(iterator):
                 if head is not None and i >= head:
                     break
 
