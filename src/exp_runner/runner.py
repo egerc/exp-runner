@@ -28,6 +28,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from itertools import product
 from pathlib import Path
+import pickle
 from typing import (
     Any,
     Callable,
@@ -112,12 +113,8 @@ def save_df(
         "parquet": dataframe.write_parquet,
         "ipc": dataframe.write_ipc,
         "ipc_stream": dataframe.write_ipc_stream,
-        "excel": dataframe.write_excel,
         "clipboard": dataframe.write_clipboard,
         "avro": dataframe.write_avro,
-        "delta": dataframe.write_delta,
-        "iceberg": dataframe.write_iceberg,
-        "database": dataframe.write_database,
     }
     writer = writer_map.get(format)
     filename = output_path / f"{'_'.join(parts)}.{format}"
@@ -142,7 +139,7 @@ def runner[A](
     output_dir: Optional[str] = None,
     format: df_disk_formats = "csv",
     head: Optional[int] = None,
-    verbose: bool = True
+    verbose: bool = True,
 ) -> Callable[
     [Callable[[A], List[MetaData]]],
     Callable[[Iterable[Variable[A]]], None],
@@ -159,6 +156,71 @@ def runner[A](
 
                 for res in func(var.value):
                     rows.append({**var.metadata, **res})
+
+            df = pl.DataFrame(rows)
+            save_df(df, output_dir, func.__name__, format=format)
+
+        return wrapped
+
+    return decorator
+
+
+def _default_pickle_saver(obj: Any, directory: Path) -> str:
+    """
+    Default saver: pickle object to a timestamped .pkl file.
+    Returns the file path as a string.
+    """
+    directory.mkdir(parents=True, exist_ok=True)
+    filename = f"{get_timestamp()}.pkl"
+    path = directory / filename
+    with open(path, "wb") as f:
+        pickle.dump(obj, f)
+    return str(path)
+
+
+def runner_pickled[A, R](
+    output_dir: Optional[str] = None,
+    artifacts_subdir: str = "artifacts",
+    format: df_disk_formats = "csv",
+    head: Optional[int] = None,
+    verbose: bool = True,
+    saver: Optional[Callable[[R, Path], str]] = None,
+    column_name: str = "artifact_path",
+) -> Callable[
+    [Callable[[A], R]],
+    Callable[[Iterable[Variable[A]]], None],
+]:
+    """
+    Variant of `runner` that saves the *result object* of `func`
+    to disk (pickled by default) and stores the file path in the DataFrame.
+    """
+
+    saver_fn = saver or _default_pickle_saver
+
+    def decorator(
+        func: Callable[[A], R],
+    ) -> Callable[[Iterable[Variable[A]]], None]:
+        def wrapped(inputs: Iterable[Variable[A]]) -> None:
+            rows: List[MetaData] = []
+
+            base_output_dir = Path(output_dir or "output")
+            artifacts_dir = base_output_dir / artifacts_subdir / func.__name__
+
+            iterator = tqdm(inputs) if verbose else inputs
+            for i, var in enumerate(iterator):
+                if head is not None and i >= head:
+                    break
+
+                result = func(var.value)
+
+                artifact_path = saver_fn(result, artifacts_dir)
+
+                rows.append(
+                    {
+                        **var.metadata,
+                        column_name: artifact_path,
+                    }
+                )
 
             df = pl.DataFrame(rows)
             save_df(df, output_dir, func.__name__, format=format)
