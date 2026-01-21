@@ -149,10 +149,12 @@ def runner[A](
     ) -> Callable[[Iterable[Variable[A]]], None]:
         def wrapped(inputs: Iterable[Variable[A]]) -> None:
             rows: List[MetaData] = []
-            iterator = tqdm(inputs) if verbose else inputs
+            iterator = tqdm(inputs)
             for i, var in enumerate(iterator):
                 if head is not None and i >= head:
                     break
+                if verbose:
+                    iterator.set_postfix_str(str({"i": i, **var.metadata}))
 
                 for res in func(var.value):
                     rows.append({**var.metadata, **res})

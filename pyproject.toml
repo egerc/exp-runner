@@ -13,3 +13,13 @@ dependencies = [
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+log_cli = true
+log_cli_level = "INFO"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.2",
+]
