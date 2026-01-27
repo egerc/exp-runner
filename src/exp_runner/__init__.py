@@ -1,3 +1,3 @@
-from exp_runner.runner import MetaData, Variable, VarProduct, runner
+from exp_runner.runner import MetaData, Variable,runner
 
-__all__ = ["MetaData", "Variable", "runner", "VarProduct"]
+__all__ = ["MetaData", "Variable", "runner"]

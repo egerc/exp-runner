@@ -21,5 +21,6 @@ log_cli_level = "INFO"
 
 [dependency-groups]
 dev = [
+    "pyright>=1.1.408",
     "pytest>=9.0.2",
 ]

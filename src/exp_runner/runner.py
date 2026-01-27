@@ -24,7 +24,6 @@ Typical workflow:
    and save results to CSV.
 """
 
-import pickle
 from dataclasses import dataclass
 from datetime import datetime
 from itertools import product
@@ -38,7 +37,6 @@ from typing import (
     List,
     Literal,
     Optional,
-    Self,
     Sequence,
     Tuple,
     Union,
@@ -117,22 +115,20 @@ def save_df(
         "avro": dataframe.write_avro,
     }
     writer = writer_map.get(format)
+    assert writer
     filename = output_path / f"{'_'.join(parts)}.{format}"
     writer(filename)
 
 
-class VarProduct:
-    @classmethod
-    def generate_from(
-        cls: type[Self],
-        inputs: Tuple[Iterable[Variable[Any]], ...],
-    ) -> Generator[Variable[Self], None, None]:
-        for combo in product(*inputs):
-            values = [v.value for v in combo]
-            metadata = {}
-            for v in combo:
-                metadata.update(v.metadata)  # type: ignore
-            yield Variable(cls(*values), metadata)  # type: ignore
+def _generate_iterable[A](
+    factory: Callable[..., A], inputs: Tuple[Iterable[Variable[Any]], ...]
+) -> Generator[Variable[A], None, None]:
+    for combo in product(*inputs):
+        values = [v.value for v in combo]
+        metadata = {}
+        for v in combo:
+            metadata.update(v.metadata)  # type: ignore
+        yield Variable(factory(*values), metadata)  # type: ignore
 
 
 def runner[A](
@@ -142,14 +138,16 @@ def runner[A](
     verbose: bool = True,
 ) -> Callable[
     [Callable[[A], List[MetaData]]],
-    Callable[[Iterable[Variable[A]]], None],
+    Callable[[Callable[..., A], Tuple[Iterable[Variable[Any]], ...]], None],
 ]:
     def decorator(
         func: Callable[[A], List[MetaData]],
-    ) -> Callable[[Iterable[Variable[A]]], None]:
-        def wrapped(inputs: Iterable[Variable[A]]) -> None:
+    ) -> Callable[[Callable[..., A], Tuple[Iterable[Variable[Any]], ...]], None]:
+        def wrapped(
+            factory: Callable[..., A], inputs: Tuple[Iterable[Variable[Any]], ...]
+        ) -> None:
             rows: List[MetaData] = []
-            iterator = tqdm(inputs)
+            iterator = tqdm(_generate_iterable(factory, inputs))
             for i, var in enumerate(iterator):
                 if head is not None and i >= head:
                     break

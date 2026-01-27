@@ -2,11 +2,11 @@ from dataclasses import dataclass
 
 import polars as pl
 
-from exp_runner import MetaData, Variable, VarProduct, runner
+from exp_runner import MetaData, Variable, runner
 
 
 @dataclass
-class Params(VarProduct):
+class Params:
     a: int
     b: int
 
@@ -14,13 +14,12 @@ class Params(VarProduct):
 def test_runner_writes_csv_and_merges_metadata(tmp_path):
     a_values = [Variable(1, {"a": 1}), Variable(2, {"a": 2})]
     b_values = [Variable(3, {"b": 3}), Variable(4, {"b": 4})]
-    inputs = Params.generate_from((a_values, b_values))
 
     @runner(output_dir=str(tmp_path), format="csv", verbose=True)
     def experiment(params: Params) -> list[MetaData]:
         return [{"sum": params.a + params.b}]
 
-    experiment(inputs)
+    experiment(Params, (a_values, b_values))
 
     csv_files = list(tmp_path.glob("*.csv"))
     assert len(csv_files) == 1
